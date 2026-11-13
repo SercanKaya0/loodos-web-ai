@@ -1,0 +1,4 @@
+# Yerel analiz notları (public repoya gitmez)
+docs/
+.DS_Store
+node_modules/

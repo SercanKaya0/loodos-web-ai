@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Loodos — Varış</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@300;400;500;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="gl" aria-hidden="true"></canvas>
+
+  <div class="hud" aria-hidden="true">
+    <div class="place" id="place">
+      <span class="place__time">09:55</span>
+      <span class="place__name">Maslak · Büyükdere Caddesi</span>
+      <span class="place__sub">Noramin İş Merkezi · No 237</span>
+    </div>
+  </div>
+
+  <button class="start" id="start" type="button">
+    <span class="start__brand">loodos</span>
+    <span class="start__cta" id="startCta">Yükleniyor…</span>
+    <span class="start__hint">Kulaklık önerilir</span>
+  </button>
+
+  <canvas class="nav" id="nav" aria-hidden="true"></canvas>
+  <div class="white" id="white" aria-hidden="true"></div>
+
+  <div class="subs" id="subs" aria-live="polite"><b id="subsWho"></b><span id="subsText"></span></div>
+
+  <div class="end" id="end">
+    <p>Devamı gelecek</p>
+    <button type="button" id="replay">Baştan izle ↺</button>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

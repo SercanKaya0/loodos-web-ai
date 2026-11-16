@@ -7,6 +7,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 const UP = new THREE.Vector3(0, 1, 0);
+const JAW_AXIS = new THREE.Vector3(0, 0, -1), JAW_OPEN = 0.1; // Rocketbox MJaw: yerel −z ekseni, ~6° (fazlası yüzü bozar)
 const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _r = new THREE.Quaternion();
 
 function limb(parent, a, b, r, mat) {
@@ -93,7 +94,7 @@ export function createPerson(o = {}) {
     const back = limb(head, V(0, 0.14, -0.06), V(0, -0.12, -0.07), 0.09, hairM); back.scale.set(1.15, 1, 0.6);
   }
 
-  const person = { root, head, torso, body, isGLB: false, lookYaw: 0, nod: 0, bones: {} };
+  const person = { root, head, torso, body, isGLB: false, lookYaw: 0, nod: 0, bones: {}, mouth: 0 };
   root.userData.person = person;
 
   if (o.name) {
@@ -104,7 +105,13 @@ export function createPerson(o = {}) {
         if (m.isBone) person.bones[m.name] = m;
         if (m.isBone && /Bip01_Head$/.test(m.name)) person.headBone = m;
         if (m.isBone && /Bip01_Neck$/.test(m.name)) person.neckBone = m;
+        if (m.isBone && /Bip01_MJaw$/.test(m.name)) person.jawBone = m;
       });
+      // Dudak senkronu: çene animasyonda yoksa dinlenme pozunu sakla
+      if (person.jawBone) {
+        person.jawAnimated = g.animations.some((c) => c.tracks.some((t) => t.name.startsWith(person.jawBone.name + '.')));
+        person.jawRest = person.jawBone.quaternion.clone();
+      }
       // Rig'li modelin gerçek boyu: iskelet güncellendikten sonra ölçülür
       const measure = () => {
         model.updateMatrixWorld(true);
@@ -155,6 +162,12 @@ export function createPerson(o = {}) {
         wq.premultiply(_r);
         bone.quaternion.copy(pq.invert().multiply(wq));
         bone.updateMatrixWorld(true);
+      }
+      // Ses şiddetine göre çene açılır (mouth: 0..1)
+      const jaw = person.jawBone;
+      if (jaw) {
+        if (!person.jawAnimated) jaw.quaternion.copy(person.jawRest);
+        if (person.mouth > 0.01) { _r.setFromAxisAngle(JAW_AXIS, person.mouth * JAW_OPEN); jaw.quaternion.multiply(_r); }
       }
       return;
     }

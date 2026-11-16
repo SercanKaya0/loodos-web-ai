@@ -247,10 +247,21 @@ export class Sound {
     if (p.positionX) { p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z; } else p.setPosition(pos.x, pos.y, pos.z);
     const g = this.gain(1.6);
     src.connect(g).connect(p).connect(this.master);
+    // dudak senkronu için ses şiddeti
+    if (!this.vAn) { this.vAn = this.ctx.createAnalyser(); this.vAn.fftSize = 512; this.vBuf = new Float32Array(512); const z = this.gain(0); this.vAn.connect(z).connect(this.ctx.destination); }
+    g.connect(this.vAn);
     g.connect(this.reverbIn);
     src.onended = onEnd;
     src.start();
     return buf.duration;
+  }
+
+  // Konuşma şiddeti 0..1 (çene hareketi için)
+  level() {
+    if (!this.vAn) return 0;
+    this.vAn.getFloatTimeDomainData(this.vBuf);
+    let e = 0; for (let i = 0; i < this.vBuf.length; i++) e += this.vBuf[i] * this.vBuf[i];
+    return Math.min(1, Math.sqrt(e / this.vBuf.length) * 5);
   }
 
   door() {
@@ -394,7 +405,7 @@ export class Sound {
     // İçeri girip kapı kapanınca yağmur neredeyse tamamen kesilir, trafik uzaktan duyulur
     this.rainLP.frequency.setTargetAtTime(7500 - inside * 6900, t, 0.25);
     const street = 1 - room; // toplantı odasında sokak sesi hiç yok
-    this.rainOut.gain.setTargetAtTime(Math.max(0.015, 1 - inside) * street, t, 0.3);
+    this.rainOut.gain.setTargetAtTime(Math.max(0.015, 1 - inside) * street * (1 - (this.dry || 0)), t, 0.3);
     this.cityOut.gain.setTargetAtTime(0.5 * (1 - inside * 0.9) * street, t, 0.3);
     this.carBus.gain.setTargetAtTime((1 - inside * 0.85) * street, t, 0.3);
     this.outside = inside < 0.3;

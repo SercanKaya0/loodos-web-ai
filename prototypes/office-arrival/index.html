@@ -23,9 +23,9 @@
 
   <div class="hud" aria-hidden="true">
     <div class="place" id="place">
-      <span class="place__time">09:55</span>
-      <span class="place__name">Maslak · Büyükdere Caddesi</span>
-      <span class="place__sub">Noramin İş Merkezi · No 237</span>
+      <span class="place__time" id="placeTime">09:55</span>
+      <span class="place__name" id="placeName">Maslak · Büyükdere Caddesi</span>
+      <span class="place__sub" id="placeSub">Noramin İş Merkezi · No 237</span>
     </div>
   </div>
 
@@ -41,9 +41,18 @@
   <div class="subs" id="subs" aria-live="polite"><b id="subsWho"></b><span id="subsText"></span></div>
 
   <div class="end" id="end">
-    <p>Devamı gelecek</p>
-    <button type="button" id="replay">Baştan izle ↺</button>
+    <p class="end__soon">Devamı gelecek</p>
+    <p class="end__final">loodos · Teşekkürler</p>
+    <div class="end__row">
+      <button type="button" id="replay">Baştan izle ↺</button>
+      <button type="button" id="endChapters">Bölümler</button>
+    </div>
   </div>
+
+  <nav class="chapters" id="chapters" aria-label="Bölümler">
+    <button type="button" class="chapters__btn" id="chapterBtn" aria-controls="chapterList">Bölümler</button>
+    <div class="chapters__list" id="chapterList"></div>
+  </nav>
 
   <script type="module" src="main.js"></script>
 </body>

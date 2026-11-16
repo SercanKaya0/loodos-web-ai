@@ -10,7 +10,10 @@ import { createRain } from './rain.js';
 import { Sound } from './audio.js';
 import { buildStore, STORE, STORE_PRESENTER, STORE_CAM_START, STORE_CAM_STOP, BENCH_SEATS } from './store.js';
 import { createPhone } from './phone.js';
-import { loadKD, drawNav } from './kdapp.js';
+import { loadKD, loadApps, drawNav } from './kdapp.js';
+import { STOPS, FINALE, VOICE_IDS, lineText } from './tour.js';
+import { buildStops, createScooter } from './stops.js';
+import { createPerson } from './people.js';
 
 const params = new URLSearchParams(location.search);
 const EYE = 1.66, EYE_SIT = 1.2;
@@ -33,6 +36,10 @@ const LINES = {
   store3: { dur: 6.8, text: "Online Mağaza'da ise Türk kahvesinden çikolataya kadar tüm ürünler bir dokunuş uzağınızda." },
   store4: { dur: 7.7, text: 'Kahve Dünyası uygulamasını Loodos olarak geliştiriyoruz. Sıradaki uygulamaya geçelim mi?' },
 };
+
+// Uygulama durakları + kapanış cümleleri
+VOICE_IDS.forEach((id) => { LINES[id] = { dur: lineText(id).length * 0.072, text: lineText(id) }; });
+void FINALE;
 
 // --- Renderer
 const canvas = document.getElementById('gl');
@@ -57,6 +64,17 @@ const room = buildRoom(scene, { glassMat: world.glassMats[0], envMats: world.lob
 const roomLights = [];
 room.group.traverse((o) => { if (o.isLight) roomLights.push(o); });
 const store = buildStore(scene, { envMats: world.lobbyMats });
+const stops = buildStops(scene, { envMats: world.lobbyMats, createPerson });
+// BRIFIC: sokakta, kaldırımda bir scooter
+const scooter = createScooter();
+scooter.position.set(-1.6, WALK_Y, -0.65); scooter.rotation.y = -1.15; scooter.visible = false;
+scene.add(scooter);
+stops.where.brific = {
+  env: null, p: new THREE.Vector3(-2.35, WALK_Y, 0.15), ry: 0.1,
+  cam: [new THREE.Vector3(-1.9, WALK_Y, 5.6), new THREE.Vector3(-2.05, WALK_Y, 2.05)], seats: [],
+};
+const envName = (e) => Object.keys(stops.envs).find((n) => stops.envs[n] === e);
+const recHome = { pos: world.receptionist.root.position.clone(), ry: world.receptionist.root.rotation.y };
 const phone = createPhone();
 phone.group.visible = false;
 scene.add(phone.group);
@@ -70,13 +88,18 @@ post.film.grain.value = 0.03;
 const sound = new Sound();
 
 // Bölge ışıkları: 'street' (sokak+lobi) | 'room' (5. kat) | 'store' (KD mağazası)
-function setArea(a) {
+function setArea(a, { dry = false } = {}) {
   lobbyLights.forEach((l) => { l.visible = a === 'street'; });
   roomLights.forEach((l) => { l.visible = a === 'room'; });
   store.lights.forEach((l) => { l.visible = a === 'store'; });
-  world.sun.visible = a !== 'store';
-  world.hemi.visible = a !== 'store';
-  rain.visible = a === 'street';
+  for (const [n, e] of Object.entries(stops.envs)) {
+    e.group.visible = n === a;
+    e.lights.forEach((l) => { l.visible = n === a; });
+  }
+  world.sun.visible = a === 'street' || a === 'room';
+  world.hemi.visible = a === 'street' || a === 'room';
+  rain.visible = a === 'street' && !dry;
+  sound.dry = dry ? 1 : 0;
 }
 setArea('street');
 // Katılımcıların toplantı odasındaki yerleri (replay için)
@@ -143,6 +166,14 @@ function reset() {
   room.people.forEach((p, i) => { p.root.position.copy(homes[i].pos); p.root.rotation.y = homes[i].ry; });
   navCanvas.style.opacity = 0; $('white').style.opacity = 0;
   sound.cafe = false;
+  Object.assign(st, { stop: -1, saidA: false, saidB: false, saidF: false, outShown: false, talker: null, finaleEnd: false });
+  scooter.visible = false;
+  world.receptionist.root.position.copy(recHome.pos); world.receptionist.root.rotation.y = recHome.ry;
+  room.presenter.root.visible = true;
+  $('end').classList.remove('is-final');
+  $('place').classList.remove('is-top');
+  $('placeTime').textContent = '09:55'; $('placeName').textContent = 'Maslak · Büyükdere Caddesi'; $('placeSub').textContent = 'Noramin İş Merkezi · No 237';
+  markChapter('start');
 }
 
 function subs(who, text) {
@@ -200,6 +231,7 @@ function say(id) {
   const head = room.presenter.headBone ? room.presenter.headBone.getWorldPosition(new THREE.Vector3()) : PRESENTER_HEAD;
   const d = sound.voice(id, head, () => { if (st.line === id) st.lineDone = true; }, 7);
   st.lineDur = d || L.dur;
+  st.talker = room.presenter;
   subs('Önder Şahin', L.text);
 }
 // Telefon: cepten ele, ekranı izleyiciye (ya da konuşmacının kendisine) dönük
@@ -221,6 +253,8 @@ function placePhone() {
 }
 // Telefon ekranını kadraja dolduracak kamera konumu
 function phoneTarget(out, dist) {
+  // dikey ekranda (mobil) yatay görüş dar: telefon taşmasın diye biraz uzak dur
+  dist *= Math.min(1.7, Math.max(1, 0.78 / camera.aspect));
   const p = phone.group.position;
   const dir = tmp2.copy(st.camFrom || camera.position).sub(p); dir.y = 0; dir.normalize();
   return out.copy(p).addScaledVector(dir, dist).add(tmp3.set(0, 0.02, 0));
@@ -253,6 +287,62 @@ function enterStore() {
   camera.fov = 55; camera.updateProjectionMatrix();
   st.store1 = false;
   go('storeIn');
+}
+
+// Bir uygulama durağına geçiş (beyaz ekranın arkasında)
+function presenterHead() { return room.presenter.headBone ? room.presenter.headBone.getWorldPosition(hp) : PRESENTER_HEAD; }
+function placeCast(W) {
+  room.people.forEach((p, i) => {
+    const seat = W.seats[i];
+    if (seat) { p.root.position.copy(seat.p); p.root.rotation.y = seat.ry; } else p.root.position.y = -500;
+  });
+  const rec = world.receptionist.root;
+  if (W.clerk) { rec.position.copy(W.clerk.p); rec.rotation.y = W.clerk.ry; } else { rec.position.copy(recHome.pos); rec.rotation.y = recHome.ry; }
+}
+function showPlace(title, sub) {
+  $('placeTime').textContent = title; $('placeName').textContent = sub; $('placeSub').textContent = 'Loodos ile geliştirildi';
+  $('place').classList.add('is-on', 'is-top');
+  clearTimeout(showPlace.t); showPlace.t = setTimeout(() => $('place').classList.remove('is-on'), 3800);
+}
+function enterStop(i) {
+  const S = STOPS[i], W = stops.where[S.id];
+  st.stop = i; st.saidA = false; st.saidB = false;
+  setArea(W.env ? envName(W.env) : 'street', { dry: true });
+  scooter.visible = S.id === 'brific';
+  room.presenter.root.position.copy(W.p); room.presenter.root.rotation.y = W.ry;
+  room.presenter.play('phone', 0.1);
+  placeCast(W);
+  st.pull = 1; st.presentPhone = true; phone.show(S.screens[0], {}, 0.01);
+  sound.hush(); sound.cafe = W.env ? envName(W.env) === 'cafe' : false;
+  if (W.env && ['cafe', 'market', 'gate', 'telco'].includes(envName(W.env))) sound.murmur(40);
+  const path = new THREE.CatmullRomCurve3([W.cam[0], W.cam[0].clone().lerp(W.cam[1], 0.5), W.cam[1]]);
+  st.leg = { y: W.p.y, path, len: path.getLength() };
+  st.s = 0; st.speed = 0; st.baseY = W.p.y; st.eye = EYE; st.free = false;
+  st.pos.copy(W.cam[0]); st.tan.copy(path.getTangentAt(0));
+  fwd.subVectors(W.p, W.cam[0]); st.yaw = Math.atan2(-fwd.x, -fwd.z); st.pitch = -0.02;
+  camera.fov = 55; camera.updateProjectionMatrix();
+  subs('', '');
+  showPlace(S.title, S.place);
+  markChapter(S.id);
+  go('tIn');
+}
+// Kapanış: toplantı odasına dönüş
+function enterFinale() {
+  setArea('room');
+  scooter.visible = false;
+  room.presenter.root.position.copy(PRESENTER); room.presenter.root.rotation.y = 0;
+  room.presenter.play('talk', 0.2);
+  st.pull = 0; st.presentPhone = false; phone.group.visible = false;
+  room.people.forEach((p, i) => { p.root.position.copy(homes[i].pos); p.root.rotation.y = homes[i].ry; });
+  world.receptionist.root.position.copy(recHome.pos); world.receptionist.root.rotation.y = recHome.ry;
+  room.curtain.lift = 1; room.spot.intensity = 60;
+  st.baseY = FY; st.eye = EYE_SIT; st.free = false; st.speed = 0; st.bobAmt = 0;
+  st.pos.set(SEAT.x, 0, SEAT.z);
+  sound.hush(); sound.cafe = false; sound.murmur(30);
+  camera.fov = 40; camera.updateProjectionMatrix();
+  subs('', '');
+  markChapter('finale');
+  go('finale');
 }
 
 function step(dt) {
@@ -289,7 +379,7 @@ function step(dt) {
         const d = sound.voice('welcome', RECEPTION_HEAD, () => { st.greetDone = true; });
         st.greetDur = d || WELCOME.dur;
         st.speaking = true;
-        world.receptionist.play('talk');
+        world.receptionist.play('talk'); st.talker = world.receptionist;
         subs(WELCOME.who, WELCOME.text);
       }
       break;
@@ -437,7 +527,61 @@ function step(dt) {
       st.camPos.lerpVectors(tmp, tmp2.copy(STORE).add(STORE_CAM_STOP).setY(STORE.y + 1.6).add(tmp3.set(-0.6, 0, 0.6)), k);
       st.camLook.lerpVectors(phone.group.position, STORE_HEAD, k);
       camera.fov = 45 + 10 * k; camera.updateProjectionMatrix();
-      if (st.lineDone && pt > 4 && !st.ended) { st.ended = true; subs('', ''); $('end').classList.add('is-on'); }
+      if (st.lineDone && pt > 3.6) { st.stop = -1; st.camFrom = camera.position.clone(); go('tOut'); }
+      break;
+    }
+
+    // ---------- Uygulama durakları ----------
+    case 'tIn': {
+      // beyaz geçişten çık, konuşmacıya yürü
+      st.white = 1 - smooth(0.05, 0.9, pt);
+      lookMode = 'tour';
+      if (pt > 0.6 && !st.saidA) { st.saidA = true; say(`${STOPS[st.stop].id}_a`); }
+      const done = walk(dt, 0.95);
+      if (done && st.saidA && pt > 2.2) { go('tZoom'); st.free = true; st.camFrom = camera.position.clone(); st.lookFrom = presenterHead().clone(); }
+      break;
+    }
+    case 'tZoom': {
+      const k = smooth(0.1, 2.2, pt);
+      phoneTarget(tmp, 0.2);
+      st.camPos.lerpVectors(st.camFrom, tmp, k);
+      st.camLook.lerpVectors(st.lookFrom, phone.group.position, k);
+      camera.fov = 55 - 10 * k; camera.updateProjectionMatrix();
+      if (st.lineDone && k >= 1) go('tApp');
+      break;
+    }
+    case 'tApp': {
+      const S = STOPS[st.stop];
+      followPhone(0.2);
+      if (pt < 0.6) phone.set({ tap: { x: 196, y: 560, k: pt / 0.6 } });
+      else if (!st.saidB) { st.saidB = true; phone.show(S.screens[1], { scroll: 0 }); say(`${S.id}_b`); }
+      else phone.set({ tap: null, scroll: smooth(1.5, Math.max(2, st.lineDur - 1), pt - 0.6) });
+      if (st.saidB && st.lineDone && pt > 1.5) { go('tOut'); st.camFrom = camera.position.clone(); }
+      break;
+    }
+    case 'tOut': {
+      // telefonda sıradaki uygulama açılır, kamera ekrana dalar → beyaz
+      const next = STOPS[st.stop + 1];
+      if (!st.outShown) { st.outShown = true; phone.show(next ? next.screens[0] : 'loodos', {}, 0.45); subs('', ''); }
+      const k = smooth(0.0, 1.0, pt), k2 = smooth(0.9, 2.1, pt);
+      phoneTarget(tmp, 0.2 - 0.16 * k2);
+      st.free = true;
+      st.camPos.lerpVectors(st.camFrom, tmp, Math.max(k, k2));
+      st.camLook.copy(phone.group.position);
+      st.white = smooth(1.5, 2.2, pt);
+      if (pt > 2.3) { st.outShown = false; if (next) enterStop(st.stop + 1); else enterFinale(); }
+      break;
+    }
+    case 'finale': {
+      st.white = 1 - smooth(0.05, 1.0, pt);
+      lookMode = 'stage';
+      if (pt > 1.2 && !st.saidF) { st.saidF = true; say('finale'); }
+      if (st.saidF && st.lineDone && !st.finaleEnd) { st.finaleEnd = pt; sound.curtain(5.2); subs('', ''); room.presenter.play('idle', 0.8); }
+      if (st.finaleEnd) {
+        const q = pt - st.finaleEnd;
+        room.curtain.lift = 1 - smooth(0.3, 5.5, q);
+        if (q > 4.5 && !st.ended) { st.ended = true; $('end').classList.add('is-on', 'is-final'); }
+      }
       break;
     }
   }
@@ -488,7 +632,13 @@ function step(dt) {
   } else if (lookMode === 'ride') {
     tYaw = Math.PI; tPitch = -0.02; k = 2.2;
   } else {
-    if (lookMode === 'storeLook') {
+    if (lookMode === 'tour') {
+      // önce mekâna, sonra konuşmacıya
+      const W = stops.where[STOPS[st.stop].id];
+      const hd = presenterHead();
+      look.copy(hd).add(tmp.set(-Math.sin(W.ry) * 2.5, 0.3, -Math.cos(W.ry) * 2.5)).lerp(hd, smooth(0.6, 2.4, st.phaseT));
+      look.lerp(phone.group.position, 0.15 * smooth(1.5, 3, st.phaseT));
+    } else if (lookMode === 'storeLook') {
       // önce banktaki ekibe, sonra konuşmacıya
       look.copy(STORE).add(tmp.set(-3.0, 1.15, 0.6)).lerp(tmp2.copy(STORE_HEAD).lerp(phone.group.position, 0.3), smooth(1.2, 3.2, st.phaseT));
     } else if (lookMode === 'stage') {
@@ -527,15 +677,20 @@ function step(dt) {
   // Karakterler
   const inLobby = st.baseY < 10 && st.pos.x < GLASS_X + 1;
   world.receptionist.nod = st.speaking ? 1 : 0;
-  world.receptionist.update(dt, inLobby ? camera.position : null);
-  const watching = (st.phase === 'reveal' && st.phaseT > 0.8) || ['talk1', 'talk2', 'talk3', 'nav', 'storeIn', 'zoomPhone', 'app2', 'app3', 'outro'].includes(st.phase);
+  world.receptionist.update(dt, inLobby || (st.stop >= 0 && st.phase.startsWith('t')) ? camera.position : null);
+  const watching = (st.phase === 'reveal' && st.phaseT > 0.8) || ['talk1', 'talk2', 'talk3', 'nav', 'storeIn', 'zoomPhone', 'app2', 'app3', 'outro', 'tIn', 'tZoom', 'tApp', 'tOut', 'finale'].includes(st.phase);
   const pHead = room.presenter.headBone ? room.presenter.headBone.getWorldPosition(tmp3) : PRESENTER_HEAD;
   room.people.forEach((p) => p.update(dt, watching ? pHead : camera.position));
-  room.presenter.update(dt, camera.position);
+  // dudak senkronu: konuşanın çenesi ses şiddetiyle açılır
+  const lvl = sound.level?.() || 0;
+  st.mouth = damp(st.mouth || 0, Math.max(0, lvl - 0.05) * 1.6, 18, dt);
+  room.presenter.mouth = st.talker === room.presenter ? Math.min(1, st.mouth) : 0;
+  world.receptionist.mouth = st.talker === world.receptionist ? Math.min(1, st.mouth) : 0;
+  room.presenter.update(dt, st.phase === 'finale' ? camera.position : camera.position);
   placePhone(dt);
   navCanvas.style.opacity = st.nav;
   // telefon yakın çekimlerinde altyazı sola alınır (ekranı kapatmasın)
-  $('subs').classList.toggle('is-side', ['zoomPhone', 'app2', 'app3'].includes(st.phase) || (st.phase === 'talk3' && st.phaseT > 3));
+  $('subs').classList.toggle('is-side', ['zoomPhone', 'app2', 'app3', 'tZoom', 'tApp'].includes(st.phase) || (st.phase === 'talk3' && st.phaseT > 3));
   $('white').style.opacity = st.white;
 
   // Ses + atmosfer: içeride sis azalır, parlama ve pozlama yumuşar
@@ -552,6 +707,9 @@ function step(dt) {
   sound.listen(camera.position, fwd);
 }
 
+// Hata ayıklama: ?debug → konsoldan erişim
+if (params.has('debug')) window.__oa = { st, room, camera, world, phone, stops };
+
 // --- Döngü
 const clock = new THREE.Clock();
 let elapsed = 0;
@@ -566,9 +724,40 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
+// --- Bölümler (atlama menüsü)
+const CHAPTERS = [['start', 'Giriş · Maslak'], ['kd', 'Kahve Dünyası'], ...STOPS.map((s) => [s.id, s.title]), ['finale', 'Kapanış']];
+function markChapter(id) {
+  document.querySelectorAll('#chapterList button').forEach((b) => b.classList.toggle('is-current', b.dataset.id === id));
+}
+function jumpTo(id) {
+  reset();
+  if (id === 'start') return;
+  // uyanma, yürüyüş ve toplantı atlanır: konuşmacı telefonu elinde
+  Object.assign(st, { T: 60, placeShown: true, placeHidden: true, pull: 1, presentPhone: true, white: 1, fade: 1, doorClosed: true });
+  post.film.lid.value = 1;
+  room.curtain.lift = 1; room.spot.intensity = 60;
+  room.presenter.play('phone', 0.1);
+  if (id === 'kd') { enterStore(); markChapter('kd'); } else if (id === 'finale') enterFinale(); else enterStop(STOPS.findIndex((s) => s.id === id));
+}
+{
+  const list = $('chapterList');
+  CHAPTERS.forEach(([id, label], i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.id = id;
+    b.innerHTML = `<span>${String(i + 1).padStart(2, '0')}</span>${label}`;
+    b.addEventListener('click', async () => {
+      $('chapters').classList.remove('is-open');
+      $('end').classList.remove('is-on');
+      if (!st.started) await begin(true, true);
+      jumpTo(id);
+    });
+    list.appendChild(b);
+  });
+  $('chapterBtn').addEventListener('click', () => $('chapters').classList.toggle('is-open'));
+}
+
 // --- Başlat
 const startBtn = $('start');
-async function begin(withSound) {
+async function begin(withSound, noJump) {
   if (st.started) return;
   if (withSound) {
     sound.init(); sound.resume();
@@ -578,6 +767,10 @@ async function begin(withSound) {
   }
   reset();
   startBtn.classList.add('is-hidden');
+  $('chapters').classList.add('is-ready');
+  if (noJump) return;
+  const stop = params.get('stop');
+  if (stop) { jumpTo(stop); return; }
   // Hata ayıklama: ?t=12 → o saniyeye atla
   const jump = parseFloat(params.get('t') || '0');
   for (let t = 0; t < jump; t += 1 / 30) step(1 / 30);
@@ -585,7 +778,7 @@ async function begin(withSound) {
 
 THREE.DefaultLoadingManager.onLoad = async () => {
   if (startBtn.classList.contains('is-ready')) return;
-  await loadKD();
+  await Promise.all([loadKD(), loadApps([...new Set([...STOPS.flatMap((s) => s.screens), 'oneapp_card'])].filter((k) => k !== 'oneapp_2'))]);
   bakeEnv();
   renderer.compile(scene, camera);
   startBtn.classList.add('is-ready');
@@ -594,6 +787,7 @@ THREE.DefaultLoadingManager.onLoad = async () => {
 };
 startBtn.addEventListener('click', () => { if (startBtn.classList.contains('is-ready')) begin(true); });
 $('replay').addEventListener('click', () => { reset(); });
+$('endChapters').addEventListener('click', () => { $('chapters').classList.add('is-open'); });
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;

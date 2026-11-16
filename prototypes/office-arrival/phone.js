@@ -18,9 +18,9 @@ export function createPhone() {
   const screenMat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: 0xe8e8e8 });
   const screenGeo = new THREE.PlaneGeometry(W - 0.0036, H - 0.0036);
   // Köşeleri yuvarlatılmış ekran maskesi
-  const mask = document.createElement('canvas'); mask.width = 64; mask.height = 132;
-  const mg = mask.getContext('2d'); mg.fillStyle = '#000'; mg.fillRect(0, 0, 64, 132); mg.fillStyle = '#fff';
-  mg.beginPath(); mg.roundRect(0, 0, 64, 132, 9); mg.fill();
+  const mask = document.createElement('canvas'); mask.width = 256; mask.height = 528;
+  const mg = mask.getContext('2d'); mg.fillStyle = '#000'; mg.fillRect(0, 0, 256, 528); mg.fillStyle = '#fff';
+  mg.beginPath(); mg.roundRect(1, 1, 254, 526, 36); mg.fill();
   screenMat.alphaMap = new THREE.CanvasTexture(mask); screenMat.transparent = true;
   const screen = new THREE.Mesh(screenGeo, screenMat);
   screen.position.z = D / 2 + 0.0002;

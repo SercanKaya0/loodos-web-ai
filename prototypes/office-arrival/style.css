@@ -59,3 +59,26 @@ body { font-family: 'Red Hat Display', system-ui, sans-serif; color: var(--ink);
 .white { position: fixed; inset: 0; z-index: 5; background: #fff; opacity: 0; pointer-events: none; }
 .subs.is-side { left: clamp(16px, 4vw, 56px); transform: none; text-align: left; width: min(420px, 32vw); bottom: 14vh; }
 @media (max-width: 700px) { .subs.is-side { left: 50%; transform: translateX(-50%); width: calc(100% - 32px); text-align: center; bottom: 3vh; } }
+
+.end__row { display: flex; gap: 10px; }
+.end__final { display: none; }
+.end.is-final .end__soon { display: none; }
+.end.is-final .end__final { display: block; font-size: 14px; letter-spacing: .4em; opacity: .9; }
+
+/* Bölümler menüsü */
+.chapters { position: fixed; top: clamp(12px, 3vh, 28px); right: clamp(12px, 3vw, 32px); z-index: 8; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; opacity: 0; pointer-events: none; transition: opacity .8s ease; }
+.chapters.is-ready { opacity: .55; pointer-events: auto; }
+.chapters.is-ready:hover, .chapters.is-open { opacity: 1; }
+.chapters__btn { background: rgba(0,0,0,.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(233,228,218,.25); color: var(--ink); font: inherit; font-size: 12px; letter-spacing: .25em; text-transform: uppercase; padding: 9px 16px; border-radius: 999px; cursor: pointer; }
+.chapters__list { display: none; flex-direction: column; min-width: 230px; max-height: min(70vh, 560px); overflow-y: auto; background: rgba(8,10,12,.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(233,228,218,.15); border-radius: 14px; padding: 6px; }
+.chapters.is-open .chapters__list { display: flex; }
+.chapters__list button { display: flex; gap: 12px; align-items: baseline; text-align: left; background: none; border: 0; color: var(--ink); font: inherit; font-size: 14px; padding: 9px 12px; border-radius: 9px; cursor: pointer; }
+.chapters__list button span { font-size: 11px; opacity: .45; letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+.chapters__list button:hover { background: rgba(255,255,255,.08); }
+.chapters__list button.is-current { color: var(--brand); }
+@media (max-width: 700px) {
+  .chapters__list { min-width: 200px; max-height: 60vh; }
+  .subs span { font-size: 15px; }
+  .place__name { font-size: 17px; }
+}
+.place.is-top { top: clamp(16px, 4vh, 40px); bottom: auto; }

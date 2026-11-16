@@ -18,6 +18,44 @@ const ASSETS = {
   store: 'assets/kd/ic_mock_store.png', banner: 'assets/kd/banner.jpg', loodos: 'assets/loodos-logo.svg',
 };
 let MAP = null;
+// Diğer uygulamaların ekranları (loodos.com/works tanıtım görsellerinden kırpıldı)
+const APP_BG = {};
+export async function loadApps(keys) {
+  await Promise.all(keys.map((k) => new Promise((res) => {
+    const im = new Image();
+    im.onload = () => {
+      IMG[k] = im;
+      // ekranın altı boş kalırsa görselin alt kenar rengiyle doldur
+      const o = document.createElement('canvas'); o.width = 8; o.height = 1;
+      const g = o.getContext('2d'); g.drawImage(im, 0, im.height - 2, im.width, 1, 0, 0, 8, 1);
+      const d = g.getImageData(4, 0, 1, 1).data; APP_BG[k] = `rgb(${d[0]},${d[1]},${d[2]})`;
+      res();
+    };
+    im.onerror = res; im.src = `assets/apps/${k}.jpg`;
+  })));
+}
+function appScreen(c, key, o = {}) {
+  const im = IMG[key];
+  c.fillStyle = APP_BG[key] || '#fff'; c.fillRect(0, 0, PW, PH);
+  if (im) {
+    const h = im.height * PW / im.width;
+    c.drawImage(im, 0, -Math.max(0, h - PH) * (o.scroll || 0), PW, h);
+  }
+  tap(c, o.tap);
+}
+// One App: otopark kartı (tanıtım görselindeki bileşen)
+function oneAppParking(c, o = {}) {
+  c.fillStyle = '#eceff1'; c.fillRect(0, 0, PW, PH);
+  statusBar(c, false);
+  const im = IMG.oneapp_card;
+  if (im) c.drawImage(im, 0, 150, PW, im.height * PW / im.width);
+  homeIndicator(c);
+  tap(c, o.tap);
+}
+function loodosScreen(c) {
+  c.fillStyle = '#0b0d10'; c.fillRect(0, 0, PW, PH);
+  if (IMG.loodos) { const w = 200, h = w * IMG.loodos.height / IMG.loodos.width; c.drawImage(IMG.loodos, (PW - w) / 2, PH / 2 - h / 2, w, h); }
+}
 export async function loadKD() {
   await Promise.all([
     ...Object.entries(ASSETS).map(([k, src]) => new Promise((res) => {
@@ -389,15 +427,16 @@ export function createPhoneScreen(scale = 2) {
   const canvas = document.createElement('canvas');
   canvas.width = PW * scale; canvas.height = PH * scale;
   const c = canvas.getContext('2d');
-  const screens = { home, map: mapScreen, order: orderScreen, shop: shopScreen };
+  const screens = { home, map: mapScreen, order: orderScreen, shop: shopScreen, oneapp_2: oneAppParking, loodos: loodosScreen };
+  const get = (n) => screens[n] || ((cc, o) => appScreen(cc, n, o));
   return {
     canvas,
     draw(name, o = {}, fadeFrom = null, k = 1) {
       c.setTransform(scale, 0, 0, scale, 0, 0);
       if (fadeFrom && k < 1) {
-        screens[fadeFrom](c, {});
-        c.globalAlpha = k; screens[name](c, o); c.globalAlpha = 1;
-      } else screens[name](c, o);
+        get(fadeFrom)(c, {});
+        c.globalAlpha = k; get(name)(c, o); c.globalAlpha = 1;
+      } else get(name)(c, o);
     },
   };
 }
